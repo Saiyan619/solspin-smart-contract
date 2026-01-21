@@ -1,0 +1,33 @@
+[package]
+resolver = "2"
+name = "solspin"
+version = "0.1.0"
+description = "Created with Anchor"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "solspin"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build","switchboard-on-demand/idl-build"]
+anchor-debug = []
+custom-heap = []
+custom-panic = []
+
+
+[dependencies]
+anchor-lang = "0.32.1"
+bytemuck = "1.15.0"
+switchboard-on-demand = { version = "0.10.0", features = ["anchor"] }
+# Pin these to avoid constant_time_eq v0.4.2 which requires edition2024
+blake3 = "=1.8.2"
+constant_time_eq = "=0.3.1"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
