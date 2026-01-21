@@ -90,13 +90,10 @@ pub mod solspin {
             let signer = &mut ctx.accounts.signer;
             let signer_key = signer.key();
             // &[&[u8]]
-            let seeds = &[
-                b"game_state",
-                signer_key.as_ref(),
-                &[game_state.bump]
-            ];
+            let seeds = &[b"game_state",signer_key.as_ref(),&[game_state.bump]];
+            let signer_seeds = &[&seeds[..]];
             let system_program = ctx.accounts.system_program.to_account_info();
-            let cpi_ctx = CpiContext::new_with_signer(system_program, transfer_accounts, &[seeds]);
+            let cpi_ctx = CpiContext::new_with_signer(system_program, transfer_accounts, signer_seeds);
             transfer(cpi_ctx, game_state.wager.checked_mul(2).unwrap())?;
         }
 
