@@ -21,9 +21,11 @@ pub mod solspin {
     pub fn call_spin(ctx: Context<CallSpin>, guess:u32, randomness_acc:Pubkey, wager:u64) -> Result<()>{
         let clock = Clock::get()?;
         let game_state = &mut ctx.accounts.game_state;
+         if guess >= MAX_RESULTS {
+    return Err(ErrorCode::InvalidGuess.into());}
         game_state.player_guess = guess;
         game_state.wager = wager;
-        let random_data = RandomnessAccountData::parse(
+        let random_data: std::cell::Ref<'_, RandomnessAccountData> = RandomnessAccountData::parse(
             ctx.accounts.randomness_data.data.borrow()
         ).unwrap();
         // Check if the data request is still fresh
@@ -35,7 +37,6 @@ pub mod solspin {
             return Err(ErrorCode::RandomDataAlreadyKnown.into());
         }
         game_state.commit_slot = random_data.seed_slot;
-
         let game_accounts = Transfer{
             from: ctx.accounts.signer.to_account_info(),
             to: ctx.accounts.escrow_vault.to_account_info()
@@ -46,6 +47,59 @@ pub mod solspin {
         game_state.vrf_acc = randomness_acc;
 
         msg!("Spinner as been rolled, results have been requested");
+        Ok(())
+    }
+
+    pub fn settle_spin(ctx: Context<SettleSpin>) -> Result<()>{
+        let clock = Clock::get()?;
+        let game_state = &mut ctx.accounts.game_state;
+        // SECURITY: Verify randomness account matches stored reference
+        if ctx.accounts.randomness_data.key() != game_state.vrf_acc.key(){
+            return Err(ErrorCode::WrongRandomDataAcc.into());
+        }
+        // Parse randomness data
+        let random_data = RandomnessAccountData::parse(
+            ctx.accounts.randomness_data.data.borrow()
+        ).unwrap();
+        // SECURITY: Verify seed_slot matches commit
+        if random_data.seed_slot != game_state.commit_slot{
+            return Err(ErrorCode::RandomDataExpired.into());
+        }
+        // Get the revealed random value
+        let result_value = random_data
+        .get_value(clock.slot)
+        .map_err(|_| ErrorCode::RandomnessNotResolvedYet)?;
+        // Use randomness to determine outcome
+        let winning_color = (result_value[0] as u8) % 6;
+        // let colors = [
+        // ColorGroup::Red,
+        // ColorGroup::Black,
+        // ColorGroup::Blue,
+        // ColorGroup::Green,
+        // ColorGroup::Purple,
+        // ColorGroup::Yellow
+        // ];
+        let actual_result = winning_color as u32;
+        let is_winner = actual_result == game_state.player_guess;
+
+        if is_winner{
+            let transfer_accounts = Transfer{
+                from: ctx.accounts.escrow_vault.to_account_info(),
+                to: ctx.accounts.signer.to_account_info()
+            };
+            let signer = &mut ctx.accounts.signer;
+            let signer_key = signer.key();
+            // &[&[u8]]
+            let seeds = &[
+                b"game_state",
+                signer_key.as_ref(),
+                &[game_state.bump]
+            ];
+            let system_program = ctx.accounts.system_program.to_account_info();
+            let cpi_ctx = CpiContext::new_with_signer(system_program, transfer_accounts, &[seeds]);
+            transfer(cpi_ctx, game_state.wager.checked_mul(2).unwrap())?;
+        }
+
         Ok(())
     }
 }
@@ -83,6 +137,22 @@ pub struct CallSpin<'info> {
     pub system_program: Program<'info, System>
 }
 
+#[derive(Accounts)]
+pub struct SettleSpin<'info> {
+    #[account(mut,
+    seeds=[b"game_state", signer.key().as_ref()], 
+    bump)]
+    pub game_state: Account<'info, GameState>,
+    /// CHECK: Escrow PDA
+    #[account(mut,seeds=[b"escrow_vault"], bump)]
+    pub escrow_vault: AccountInfo<'info>,
+    /// CHECK: Validated manually in handler
+    pub randomness_data: AccountInfo<'info>,
+    #[account(mut)]
+    pub signer: Signer<'info>,
+    system_program: Program<'info, System>
+}
+
 #[account]
 pub struct GameState{
     player_guess: u32,
@@ -94,10 +164,26 @@ pub struct GameState{
     commit_slot: u64
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq)]
+pub enum ColorGroup{
+    Red,
+    Black,
+    Blue,
+    Green,
+    Purple,
+    Yellow
+}
+
 #[error_code]
 pub enum ErrorCode{
     #[msg("Random data request is expired")]
     RandomDataExpired,
     #[msg("Random data request is already known")]
-    RandomDataAlreadyKnown
+    RandomDataAlreadyKnown,
+    #[msg("Wrong Random-data account")]
+    WrongRandomDataAcc,
+    #[msg("Random data has not been derived yet")]
+    RandomnessNotResolvedYet,
+    #[msg("This guess is invalid")]
+    InvalidGuess
 }
