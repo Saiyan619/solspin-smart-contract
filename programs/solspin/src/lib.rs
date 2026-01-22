@@ -14,11 +14,12 @@ pub mod solspin {
         game_state.wager = 0;
         game_state.bump = ctx.bumps.game_state;
         game_state.max_result = MAX_RESULTS;
-        game_state.game_vault = ctx.accounts.escrow_vault.key();
+        game_state.game_vault_bump = ctx.bumps.escrow_vault;
         Ok(())
     }
 
     pub fn call_spin(ctx: Context<CallSpin>, guess:u32, randomness_acc:Pubkey, wager:u64) -> Result<()>{
+        require!(wager > 0, ErrorCode::ZeroBet);
         let clock = Clock::get()?;
         let game_state = &mut ctx.accounts.game_state;
          if guess >= MAX_RESULTS {
@@ -81,20 +82,20 @@ pub mod solspin {
         // ];
         let actual_result = winning_color as u32;
         let is_winner = actual_result == game_state.player_guess;
-
+        let payout = game_state.wager.checked_mul(2).ok_or(ErrorCode::Overflow)?;
+        let vault = &ctx.accounts.escrow_vault;
+        require!(vault.lamports() >= payout,ErrorCode::InsufficientVault);
         if is_winner{
             let transfer_accounts = Transfer{
                 from: ctx.accounts.escrow_vault.to_account_info(),
                 to: ctx.accounts.signer.to_account_info()
             };
-            let signer = &mut ctx.accounts.signer;
-            let signer_key = signer.key();
             // &[&[u8]]
-            let seeds = &[b"game_state",signer_key.as_ref(),&[game_state.bump]];
+            let seeds = &[b"escrow_vault".as_ref(),&[game_state.game_vault_bump]];
             let signer_seeds = &[&seeds[..]];
             let system_program = ctx.accounts.system_program.to_account_info();
             let cpi_ctx = CpiContext::new_with_signer(system_program, transfer_accounts, signer_seeds);
-            transfer(cpi_ctx, game_state.wager.checked_mul(2).unwrap())?;
+            transfer(cpi_ctx, game_state.wager.checked_mul(2).ok_or(ErrorCode::Overflow)?)?;
         }
 
         Ok(())
@@ -156,7 +157,7 @@ pub struct GameState{
     wager: u64,
     vrf_acc: Pubkey,
     bump: u8,
-    game_vault: Pubkey,
+    game_vault_bump: u8,
     max_result: u32,
     commit_slot: u64
 }
@@ -182,5 +183,11 @@ pub enum ErrorCode{
     #[msg("Random data has not been derived yet")]
     RandomnessNotResolvedYet,
     #[msg("This guess is invalid")]
-    InvalidGuess
+    InvalidGuess,
+    #[msg("Calculation Overflow")]
+    Overflow,
+    #[msg("Zero Bet is not allowed")]
+    ZeroBet,
+    #[msg("Vault has insufficient Funds")]
+    InsufficientVault
 }
