@@ -8,6 +8,11 @@ const MAX_RESULTS:u32 = 6;
 pub mod solspin {
     use super::*;
 
+    pub fn initialize_house(ctx: Context<InitailizeHouse>) -> Result<()>{
+        msg!("House Vault initialized by Admin: {}", ctx.accounts.admin.key());
+        Ok(())
+    }
+
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let game_state = &mut ctx.accounts.game_state;
         game_state.vrf_acc = Pubkey::default();
@@ -25,7 +30,7 @@ pub mod solspin {
         let clock = Clock::get()?;
         let game_state = &mut ctx.accounts.game_state;
          if guess >= MAX_RESULTS {
-    return Err(ErrorCode::InvalidGuess.into());}
+    return Err(ErrorCode::InvalidGuess.into());};
         game_state.player_guess = guess;
         game_state.wager = wager;
         let random_data: std::cell::Ref<'_, RandomnessAccountData> = RandomnessAccountData::parse(
@@ -77,9 +82,12 @@ pub mod solspin {
         let actual_result = winning_color as u32;
         let is_winner = actual_result == game_state.player_guess;
         let payout = game_state.wager.checked_mul(2).ok_or(ErrorCode::Overflow)?;
-        let vault = &ctx.accounts.escrow_vault;
-        require!(vault.lamports() >= payout,ErrorCode::InsufficientVault);
+        let vault: &AccountInfo<'_> = &ctx.accounts.escrow_vault;
+        let rent = Rent::get()?;
+        // This is 0 becuase im using the escrow vault to only hold sol, there's no extra data been held
+        let min_rent_bal: u64 = rent.minimum_balance(vault.data_len());
         if is_winner{
+            require!(vault.lamports() > payout + min_rent_bal, ErrorCode::InsufficientVault);
             let transfer_accounts = Transfer{
                 from: ctx.accounts.escrow_vault.to_account_info(),
                 to: ctx.accounts.signer.to_account_info()
@@ -90,10 +98,24 @@ pub mod solspin {
             let system_program = ctx.accounts.system_program.to_account_info();
             let cpi_ctx = CpiContext::new_with_signer(system_program, transfer_accounts, signer_seeds);
             transfer(cpi_ctx, payout)?;
+            game_state.commit_slot = 0;
+            msg!("player won!!: {} with option: {} and player guess was: {}", game_state.wager, actual_result, game_state.player_guess);
+        }else{
+             msg!("player lost: {} with option: {} and player guess was: {}", game_state.wager, actual_result, game_state.player_guess);
+             game_state.commit_slot = 0;
         }
-
         Ok(())
     }
+}
+
+#[derive(Accounts)]
+pub struct InitailizeHouse<'info>{        
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    /// CHECK: Escrow PDA
+    #[account(init, payer=admin, space=8, seeds=[b"escrow_vault"], bump)]
+    pub escrow_vault: AccountInfo<'info>,
+    pub system_program: Program<'info, System>
 }
 
 #[derive(Accounts)]
@@ -142,7 +164,7 @@ pub struct SettleSpin<'info> {
     pub randomness_data: AccountInfo<'info>,
     #[account(mut)]
     pub signer: Signer<'info>,
-    system_program: Program<'info, System>
+    pub system_program: Program<'info, System>
 }
 
 #[account]
