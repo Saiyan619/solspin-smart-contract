@@ -15,6 +15,8 @@ pub mod solspin {
         game_state.bump = ctx.bumps.game_state;
         game_state.max_result = MAX_RESULTS;
         game_state.game_vault_bump = ctx.bumps.escrow_vault;
+        game_state.player_guess = 0;
+        game_state.commit_slot = 0;
         Ok(())
     }
 
@@ -72,14 +74,6 @@ pub mod solspin {
         .map_err(|_| ErrorCode::RandomnessNotResolvedYet)?;
         // Use randomness to determine outcome
         let winning_color = (result_value[0] as u8) % 6;
-        // let colors = [
-        // ColorGroup::Red,
-        // ColorGroup::Black,
-        // ColorGroup::Blue,
-        // ColorGroup::Green,
-        // ColorGroup::Purple,
-        // ColorGroup::Yellow
-        // ];
         let actual_result = winning_color as u32;
         let is_winner = actual_result == game_state.player_guess;
         let payout = game_state.wager.checked_mul(2).ok_or(ErrorCode::Overflow)?;
@@ -95,7 +89,7 @@ pub mod solspin {
             let signer_seeds = &[&seeds[..]];
             let system_program = ctx.accounts.system_program.to_account_info();
             let cpi_ctx = CpiContext::new_with_signer(system_program, transfer_accounts, signer_seeds);
-            transfer(cpi_ctx, game_state.wager.checked_mul(2).ok_or(ErrorCode::Overflow)?)?;
+            transfer(cpi_ctx, payout)?;
         }
 
         Ok(())
@@ -162,15 +156,15 @@ pub struct GameState{
     commit_slot: u64
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq)]
-pub enum ColorGroup{
-    Red,
-    Black,
-    Blue,
-    Green,
-    Purple,
-    Yellow
-}
+// #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq)]
+// pub enum ColorGroup{
+//     Red,
+//     Black,
+//     Blue,
+//     Green,
+//     Purple,
+//     Yellow
+// }
 
 #[error_code]
 pub enum ErrorCode{
