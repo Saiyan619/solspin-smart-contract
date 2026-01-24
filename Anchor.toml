@@ -6,13 +6,16 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-solspin = "Egeg8KWsUGPMoSE5MnhAto8QrtwenBRQMcgscsQYubuR"
+solspin = "6jNcqtLkYWrPKTY8sSmKJKitYUapmk1RGz22vzv55t7n"
+
+[programs.devnet]
+solspin = "6jNcqtLkYWrPKTY8sSmKJKitYUapmk1RGz22vzv55t7n"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "localnet"
+cluster = "devnet"  # Changed from "localnet" to "devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

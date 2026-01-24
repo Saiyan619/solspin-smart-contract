@@ -2,13 +2,13 @@ use anchor_lang::prelude::*;
 use anchor_lang::system_program::{Transfer, transfer};
 use switchboard_on_demand::accounts::RandomnessAccountData;
 
-declare_id!("Egeg8KWsUGPMoSE5MnhAto8QrtwenBRQMcgscsQYubuR");
+declare_id!("6jNcqtLkYWrPKTY8sSmKJKitYUapmk1RGz22vzv55t7n");
 const MAX_RESULTS:u32 = 6;
 #[program]
 pub mod solspin {
     use super::*;
 
-    pub fn initialize_house(ctx: Context<InitailizeHouse>) -> Result<()>{
+    pub fn initialize_house(ctx: Context<InitializeHouse>) -> Result<()>{
         msg!("House Vault initialized by Admin: {}", ctx.accounts.admin.key());
         Ok(())
     }
@@ -30,7 +30,7 @@ pub mod solspin {
         let clock = Clock::get()?;
         let game_state = &mut ctx.accounts.game_state;
          if guess >= MAX_RESULTS {
-    return Err(ErrorCode::InvalidGuess.into());};
+    return Err(ErrorCode::InvalidGuess.into());}
         game_state.player_guess = guess;
         game_state.wager = wager;
         let random_data: std::cell::Ref<'_, RandomnessAccountData> = RandomnessAccountData::parse(
@@ -99,17 +99,21 @@ pub mod solspin {
             let cpi_ctx = CpiContext::new_with_signer(system_program, transfer_accounts, signer_seeds);
             transfer(cpi_ctx, payout)?;
             game_state.commit_slot = 0;
+            game_state.vrf_acc = Pubkey::default();
+            game_state.wager = 0;
             msg!("player won!!: {} with option: {} and player guess was: {}", game_state.wager, actual_result, game_state.player_guess);
         }else{
              msg!("player lost: {} with option: {} and player guess was: {}", game_state.wager, actual_result, game_state.player_guess);
              game_state.commit_slot = 0;
+             game_state.vrf_acc = Pubkey::default();
+             game_state.wager = 0;
         }
         Ok(())
     }
 }
 
 #[derive(Accounts)]
-pub struct InitailizeHouse<'info>{        
+pub struct InitializeHouse<'info>{        
     #[account(mut)]
     pub admin: Signer<'info>,
     /// CHECK: Escrow PDA
