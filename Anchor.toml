@@ -15,7 +15,7 @@ solspin = "6jNcqtLkYWrPKTY8sSmKJKitYUapmk1RGz22vzv55t7n"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"  # Changed from "localnet" to "devnet"
+cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

@@ -112,6 +112,22 @@ pub mod solspin {
     }
 }
 
+pub fn close_house(ctx: Context<CloseHouse>) -> Result<()> {
+    let vault = ctx.accounts.escrow_vault.to_account_info();
+    let admin = ctx.accounts.admin.to_account_info();
+    
+    // Transfer all lamports to admin
+    let vault_lamports = vault.lamports();
+    **vault.try_borrow_mut_lamports()? = 0;
+    **admin.try_borrow_mut_lamports()? += vault_lamports;
+    
+    // Reallocate to 0 bytes (closes the account)
+    vault.realloc(0, false)?;
+    vault.assign(&anchor_lang::system_program::ID);
+    
+    Ok(())
+}
+
 #[derive(Accounts)]
 pub struct InitializeHouse<'info>{        
     #[account(mut)]
@@ -171,6 +187,16 @@ pub struct SettleSpin<'info> {
     pub system_program: Program<'info, System>
 }
 
+#[derive(Accounts)]
+pub struct CloseHouse<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    /// CHECK: PDA being closed
+    #[account(mut, seeds=[b"escrow_vault"], bump)]
+    pub escrow_vault: AccountInfo<'info>,
+    pub system_program: Program<'info, System>,
+}
+
 #[account]
 pub struct GameState{
     player_guess: u32,
@@ -211,3 +237,5 @@ pub enum ErrorCode{
     #[msg("Vault has insufficient Funds")]
     InsufficientVault
 }
+
+
