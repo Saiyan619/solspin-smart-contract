@@ -18,6 +18,7 @@
     "typescript": "^5.7.3"
   },
   "dependencies": {
+    "@switchboard-xyz/solana.js": "^3.2.5",
     "bn.js": "^5.2.2"
   }
 }

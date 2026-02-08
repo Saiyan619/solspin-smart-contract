@@ -29,8 +29,8 @@ pub mod solspin {
         require!(wager > 0, ErrorCode::ZeroBet);
         let clock = Clock::get()?;
         let game_state = &mut ctx.accounts.game_state;
-         if guess >= MAX_RESULTS {
-    return Err(ErrorCode::InvalidGuess.into());}
+        if guess < 1 || guess > MAX_RESULTS {
+        return Err(ErrorCode::InvalidGuess.into());}
         game_state.player_guess = guess;
         game_state.wager = wager;
         let random_data: std::cell::Ref<'_, RandomnessAccountData> = RandomnessAccountData::parse(
@@ -78,8 +78,9 @@ pub mod solspin {
         .get_value(clock.slot)
         .map_err(|_| ErrorCode::RandomnessNotResolvedYet)?;
         // Use randomness to determine outcome
-        let winning_color = (result_value[0] as u8) % 6;
-        let actual_result = winning_color as u32;
+        let byte = result_value[0];
+        require!(byte < 252, ErrorCode::InvalidRandomness);
+        let actual_result = ((byte % 6) + 1) as u32;
         let is_winner = actual_result == game_state.player_guess;
         let payout = game_state.wager.checked_mul(2).ok_or(ErrorCode::Overflow)?;
         let vault: &AccountInfo<'_> = &ctx.accounts.escrow_vault;
@@ -235,7 +236,9 @@ pub enum ErrorCode{
     #[msg("Zero Bet is not allowed")]
     ZeroBet,
     #[msg("Vault has insufficient Funds")]
-    InsufficientVault
+    InsufficientVault,
+    #[msg("Randomness maths is wrong!")]
+    InvalidRandomness
 }
 
 
